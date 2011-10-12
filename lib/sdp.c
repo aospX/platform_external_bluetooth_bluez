@@ -67,7 +67,7 @@ static uint128_t bluetooth_base_uuid = {
 			0x80, 0x00, 0x00, 0x80, 0x5F, 0x9B, 0x34, 0xFB }
 };
 
-#define SDP_MAX_ATTR_LEN 65535
+#define SDP_MAX_ATTR_LEN 640
 
 static sdp_data_t *sdp_copy_seq(sdp_data_t *data);
 static int sdp_attr_add_new_with_length(sdp_record_t *rec,

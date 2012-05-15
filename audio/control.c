@@ -177,6 +177,7 @@
 static DBusConnection *connection = NULL;
 static gchar *input_device_name = NULL;
 static GSList *servers = NULL;
+static gchar **metadata_black_list = NULL;
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 
@@ -1169,6 +1170,14 @@ int avrcp_register(DBusConnection *conn, const bdaddr_t *src, GKeyFile *config)
 			input_device_name = NULL;
 			g_error_free(err);
 		}
+		err = NULL;
+		metadata_black_list = g_key_file_get_string_list(config, "AVRCP",
+				"MetaDataBlackList", NULL, &err);
+		if (err) {
+			DBG("audio.conf: %s", err->message);
+			g_strfreev(metadata_black_list);
+			g_error_free(err);
+		}
 	}
 
 	server = g_new0(struct avctp_server, 1);
@@ -1257,6 +1266,7 @@ void avrcp_unregister(const bdaddr_t *src)
 	g_io_channel_shutdown(server->io, TRUE, NULL);
 	g_io_channel_unref(server->io);
 	g_free(server);
+	g_strfreev(metadata_black_list);
 
 	if (servers)
 		return;
@@ -1601,6 +1611,17 @@ void control_update(struct audio_device *dev, uint16_t uuid16)
 		control->target = TRUE;
 }
 
+static gboolean device_is_metadata_black_listed(char *dev_name)
+{
+	int i;
+
+	for (i = 0; metadata_black_list && metadata_black_list[i]; i++) {
+		if (g_strcmp0(dev_name, metadata_black_list[i]) == 0)
+			return TRUE;
+	}
+	return FALSE;
+}
+
 static uint8_t get_avrcp_quirks(struct audio_device *dev)
 {
 	char name[MAX_NAME_LENGTH + 1];
@@ -1608,15 +1629,7 @@ static uint8_t get_avrcp_quirks(struct audio_device *dev)
 
 	device_get_name(dev->btd_dev, name, sizeof(name));
 
-	if (g_str_equal(name, "Ford Audio")) {
-		/* The Sony car stereo Ford is using under their brand as
-		 * '6000 CD' has a completely broken AVRCP 1.3 implementation.
-		 * After recognizing AVRCP 1.3 TG capabilities and exchanging
-		 * a few PDUs, the car stereo disconnects and reconnects BT,
-		 * also resetting USB devices if connected to it.
-		 * To avoid that and allow at least HFP and A2DP to work,
-		 * prevent any AVRCP 1.3 PDUs from being sent.
-		 */
+	if (device_is_metadata_black_listed(name)) {
 		quirks |= QUIRK_NO_CAPABILITIES;
 		quirks |= QUIRK_NO_METADATA;
 		quirks |= QUIRK_NO_NOTIFICATIONS;
